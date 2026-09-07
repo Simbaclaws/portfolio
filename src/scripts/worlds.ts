@@ -118,7 +118,7 @@ export function createWorlds(refresh:()=>void,anisotropy=1){
   // Public GPX route, projected in a local tangent plane (east +X, north -Z).
   path(routePoints,.48,roadMat,.015);
   const linePoints=routePoints.map(([x,z])=>new T.Vector3(x,.045,z));g.add(new T.Line(new T.BufferGeometry().setFromPoints(linePoints),new T.LineBasicMaterial({color:'#e4c480',transparent:true,opacity:.5})));
-  const reserved=[[-2.75,-3.31],[-4.77,-3.89],[-6.07,5.05],[-4.84,8.31],[3.62,-.795],[11.23,12.02],[12.5,7],...routeStops.map(s=>[s.x,s.z])];
+  const reserved=[[-2.75,-3.31],[-4.77,-3.89],[-6.07,5.05],[-4.84,8.31],[3.62,-.795],[4.1,.8],[11.23,12.02],[12.5,7],...routeStops.map(s=>[s.x,s.z])];
   const palettes=['#a97058','#bf9c78','#777f83','#8e6252','#be866c'].map(c=>mat(c));
   // Dense canal-side terraces, simplified footprints rather than satellite textures.
   for(let x=-8;x<4;x+=1.05)for(let z=-10;z<5;z+=1.25){if(reserved.some(p=>Math.hypot(p[0]-x,p[1]-z)<1.4)||routePoints.some(p=>Math.hypot(p[0]-x,p[1]-z)<.5)||Math.abs(x-(-4.1-z*.1))<.45)continue;const i=Math.round((x+8)*7+(z+10)*3);const b=building(g,x,z,.75,.65+(Math.abs(i)%3)*.2,palettes[Math.abs(i)%5]);b.scale.z=.4;}

@@ -5,13 +5,13 @@ const title = 'A small world — Interactive portfolio';
 const description = 'Explore a home, Delft, a tabletop dungeon, robotics and website projects.';
 const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site) : undefined;
 ---
-<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width"/><title>{title}</title><meta name="description" content={description}/><meta name="theme-color" content="#09141b"/><meta property="og:title" content={title}/><meta property="og:description" content={description}/><meta property="og:type" content="website"/>{canonical && <link rel="canonical" href={canonical}/>}<style is:inline set:html={globalStyles}></style></head>
+<!doctype html><html lang="en"><head><meta charset="UTF-8"/><script is:inline>/* After a deploy, cached HTML can point at a bundle that no longer exists; one fresh reload picks up the new HTML instead of leaving the visitor on the fallback list. */addEventListener('error',e=>{const t=e.target;if(t instanceof HTMLScriptElement&&t.src){try{if(sessionStorage.getItem('portfolio-reloaded'))return;sessionStorage.setItem('portfolio-reloaded','1');}catch{return;}location.reload();}},true);</script><meta name="viewport" content="width=device-width"/><title>{title}</title><meta name="description" content={description}/><meta name="theme-color" content="#09141b"/><meta property="og:title" content={title}/><meta property="og:description" content={description}/><meta property="og:type" content="website"/>{canonical && <link rel="canonical" href={canonical}/>}<style is:inline set:html={globalStyles}></style></head>
 <body>
 <header class="hud"><a href="#main" class="brand">A SMALL WORLD<span>AN INTERACTIVE PORTFOLIO</span></a><div class="toolbar"><button id="home" hidden>Home</button><button id="skip-intro" hidden>Skip intro</button><button id="pause" hidden>Pause motion</button><button id="directory">Projects ↗</button></div></header>
 <main id="main"><div id="lab-viewport" aria-label="Interactive 3D world. Use the room navigation for keyboard access to doors and projects." role="img"></div><div id="loading" role="status" hidden><span class="loading-line"></span><h1>Opening a small world.</h1><p>A place for the things I build and enjoy.</p></div>
 <div class="scene-caption" id="scene-caption" hidden><span class="eyebrow" id="room-kicker">DELFT / THE NETHERLANDS</span><h1 id="room-title">Welcome home.</h1><p id="room-subtitle">Hover to discover. Click to explore.</p></div>
 <div id="tooltip" hidden></div><p id="announcement" role="status" class="sr-only"></p>
-<div id="scene-fade" hidden></div><footer class="controls" hidden id="controls"><span>DRAG TO ORBIT · SCROLL TO ZOOM · GLOWING DOTS ARE CLICKABLE</span><nav id="room-actions" aria-label="Room navigation"></nav></footer>
+<div id="scene-fade" hidden></div><footer class="controls" hidden id="controls"><span>DRAG TO ORBIT · SCROLL TO ZOOM</span><nav id="room-actions" aria-label="Room navigation"></nav></footer>
 <noscript><p class="fallback">The interactive lab needs JavaScript. All projects are available below.</p></noscript><section id="work" class="fallback"><h1>Selected work</h1><article id="scenerie"><p class="eyebrow">01 / SHOPIFY</p><h2>{projects.scenerie.name}</h2><p>A hobby shop for tabletop miniatures, scenery, plants and terrain, paints, and hobby materials.</p><p>{projects.scenerie.contribution}</p><a href={projects.scenerie.url}>Visit the shop ↗</a></article><article id="cyto"><p class="eyebrow">02 / LIGHTING</p><h2>{projects.cyto.name}</h2><p>A circadian-lighting and red-light device company.</p><p>{projects.cyto.contribution}</p><a href={projects.cyto.url}>Visit the website ↗</a></article>{[projects.diginova,projects.shuttle,projects.lumen].map(p=><article><h2>{p.name}</h2>{p.contribution && <p>{p.contribution}</p>}<a href={p.url}>Visit website ↗</a></article>)}</section>
 </main>
 <dialog id="project-dialog" aria-labelledby="dialog-title"><button id="close-dialog" aria-label="Close project">✕</button><p id="dialog-kicker" class="eyebrow"></p><h2 id="dialog-title"></h2><a id="dialog-image-link" hidden><picture><source id="dialog-webp" type="image/webp"/><img id="dialog-image" width="1100" height="619" decoding="async"/></picture></a><p id="dialog-copy"></p><p id="dialog-role"></p><a id="floo-link" href="https://www.garage2020.nl/projecten/floo/" hidden>Explore FLOo ↗</a><a id="dialog-link">Visit website ↗</a><button id="dialog-action" hidden></button></dialog>
@@ -39,9 +39,15 @@ function open(index:number){$('tooltip').hidden=true;lastFocus=document.activeEl
 $('close-dialog').onclick=()=>dialog.close();dialog.addEventListener('close',()=>lastFocus?.focus());dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close();}});
 $('directory').onclick=()=>{document.body.classList.toggle('directory-open');$('directory').setAttribute('aria-expanded',String(document.body.classList.contains('directory-open')));};
 $('loading').hidden=false;
+const RELOADED='portfolio-reloaded';
+// Same recovery as the inline handler in <head>, for the lazily loaded scene chunk.
+function reloadOnce(){try{if(sessionStorage.getItem(RELOADED))return false;sessionStorage.setItem(RELOADED,'1');}catch{return false;}location.reload();return true;}
+function showFallback(message:string){document.body.classList.remove('immersive');['loading','controls','scene-caption','home','pause','tooltip','skip-intro'].forEach(id=>$(id).hidden=true);$('announcement').textContent=message;}
+let losses=0;
 async function start(){try{
  const {mountLab}=await import('../scripts/lab');
- lab=mountLab($('lab-viewport'),()=>{document.body.classList.remove('immersive');['loading','controls','scene-caption','home','pause','tooltip','skip-intro'].forEach(id=>$(id).hidden=true);$('announcement').textContent='3D unavailable. Project links are available.';});
+ // A lost WebGL context (backgrounded tab, GPU reset) gets a fresh mount instead of a dead page.
+ lab=mountLab($('lab-viewport'),()=>{if(losses++<2)setTimeout(start,400);else showFallback('3D unavailable. Project links are available.');});
  lab.onAction=action=>{if(action.startsWith('project:'))open(Number(action.split(':')[1]));else open(action==='about'?5:6);};
  lab.onHover=(text,x,y)=>{const tip=$('tooltip');tip.hidden=!text;tip.textContent=text+' ↗';tip.style.left=Math.max(8,Math.min(x+18,innerWidth-300))+'px';tip.style.top=Math.max(85,y-40)+'px';};
  lab.onRoom=(id,world)=>{$('room-title').textContent=world.title;$('room-subtitle').textContent=world.subtitle;$('room-kicker').textContent=id==='delft'?'DELFT / EXPLORE THE TOWN':'A SMALL WORLD / '+id.toUpperCase();$('announcement').textContent='Entered '+world.title;const nav=$('room-actions');nav.replaceChildren();world.actions.forEach(item=>{const button=document.createElement('button');button.textContent=item.label;button.onclick=()=>lab?.dispatch(item.action);nav.append(button);});};
@@ -49,7 +55,8 @@ async function start(){try{
  lab.onFade=fade=>{$('scene-fade').hidden=!fade;};
  document.body.classList.add('immersive');$('loading').hidden=true;['scene-caption','controls','home','pause'].forEach(id=>$(id).hidden=false);
  const update=()=>{$('pause').textContent=lab?.paused?'Resume motion':'Pause motion';$('pause').setAttribute('aria-pressed',String(lab?.paused));};lab.onChange=update;update();$('pause').onclick=()=>{lab?.toggle();update();};$('home').onclick=()=>lab?.go('house');$('skip-intro').onclick=()=>lab?.skipIntro();
-}catch{$('loading').hidden=true;$('announcement').textContent='The world could not load. Browse the projects below.';}}
+ try{sessionStorage.removeItem(RELOADED);}catch{}
+}catch{if(!reloadOnce()){$('loading').hidden=true;$('announcement').textContent='The world could not load. Browse the projects below.';}}}
 // Begin the separately bundled scene after the HTML shell gets its first paint.
 requestAnimationFrame(()=>requestAnimationFrame(start));
 </script></body></html>
