@@ -3,10 +3,10 @@ import * as T from 'three';
 export type RoomId = 'house'|'delft'|'dungeon'|'lab'|'health'|'cinema';
 export type Action = {label:string; action:string};
 export type World = {group:T.Group; tick:(t:number,dt:number)=>void; actions:Action[]; title:string; subtitle:string; distance:number; target:T.Vector3};
-export function createWorlds(refresh:()=>void){
+export function createWorlds(refresh:()=>void,anisotropy=1){
  const textures:T.Texture[]=[];
  const imageTextures=new Map<string,T.Texture>();
- function screenshot(name:string){let texture=imageTextures.get(name);if(!texture){texture=new T.TextureLoader().load(import.meta.env.BASE_URL+'images/'+name+'.webp',refresh);texture.colorSpace=T.SRGBColorSpace;imageTextures.set(name,texture);textures.push(texture);}return texture;}
+ function screenshot(name:string){let texture=imageTextures.get(name);if(!texture){texture=new T.TextureLoader().load(import.meta.env.BASE_URL+'images/'+name+'.webp',refresh);texture.colorSpace=T.SRGBColorSpace;texture.anisotropy=anisotropy;imageTextures.set(name,texture);textures.push(texture);}return texture;}
  const materials=new Map<string,T.MeshStandardMaterial>();
  const mat=(color:string,metal=.05,rough=.65)=>{const key=color+metal+rough;if(!materials.has(key))materials.set(key,new T.MeshStandardMaterial({color,metalness:metal,roughness:rough}));return materials.get(key)!;};
  const C={wood:mat('#ad7751'),edge:mat('#d8bb84'),wall:mat('#718b8b'),floor:mat('#314b53'),dark:mat('#152831'),steel:mat('#7c9b9d',.65,.3),white:mat('#dae6df'),red:mat('#bc3846'),orange:mat('#e8ad55'),skin:mat('#d4a17c'),green:mat('#6c9675'),blue:mat('#5d94ad'),black:mat('#10202a')};
@@ -19,9 +19,36 @@ export function createWorlds(refresh:()=>void){
  const group=(p:T.Object3D,x=0,y=0,z=0)=>{const g=new T.Group();g.position.set(x,y,z);p.add(g);return g;};
  const interactive=(o:T.Object3D,label:string,action:string)=>{o.userData={label,action};return o;};
  const rod=(p:T.Object3D,a:T.Vector3,b:T.Vector3,r:number,m:T.Material)=>{const v=b.clone().sub(a);const o=cyl(p,r,v.length(),0,0,0,m,8);o.position.copy(a).add(b).multiplyScalar(.5);o.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),v.normalize());return o;};
- function textTexture(lines:string[],bg='#10232c',fg='#d8f3d3',width=768,height=384){const c=document.createElement('canvas');c.width=width;c.height=height;const ctx=c.getContext('2d')!;ctx.fillStyle=bg;ctx.fillRect(0,0,width,height);ctx.fillStyle=fg;ctx.textBaseline='middle';ctx.font=`${Math.min(64,height/(lines.length+1)*.8)}px monospace`;lines.forEach((line,i)=>ctx.fillText(line,32,(i+1)*height/(lines.length+1)));const t=new T.CanvasTexture(c);t.colorSpace=T.SRGBColorSpace;textures.push(t);return t;}
- function plane(p:T.Object3D,w:number,h:number,x:number,y:number,z:number,texture:T.Texture){const m=new T.MeshBasicMaterial({map:texture,side:T.DoubleSide});const o=mesh(p,new T.PlaneGeometry(w,h),m,x,y,z);o.castShadow=false;return o;}
- function label(p:T.Object3D,text:string,x:number,y:number,z:number,w=2){return plane(p,w,.36,x,y,z,textTexture([text],'#152b34','#dff8c0',768,110));}
+ const finish=(t:T.CanvasTexture)=>{t.colorSpace=T.SRGBColorSpace;t.anisotropy=anisotropy;textures.push(t);return t;};
+ // Screen copy: the whole block is scaled down until the longest line fits, so
+ // nothing is silently cropped at the edge of the canvas.
+ function textTexture(lines:string[],bg='#10232c',fg='#d8f3d3',width=768,height=432){const c=document.createElement('canvas');c.width=width;c.height=height;const ctx=c.getContext('2d')!;ctx.fillStyle=bg;ctx.fillRect(0,0,width,height);
+  const pad=width*.05,rows=Math.max(lines.length,1),font=(size:number)=>`500 ${size}px ui-monospace,Menlo,Consolas,monospace`;
+  let size=Math.min(height/(rows*1.45),height*.5);ctx.font=font(size);
+  size*=Math.min(1,(width-pad*2)/Math.max(1,...lines.map(line=>ctx.measureText(line).width)));ctx.font=font(size);
+  ctx.fillStyle=fg;ctx.textBaseline='middle';const step=size*1.45,top=(height-step*(rows-1))/2;
+  lines.forEach((line,i)=>ctx.fillText(line,pad,top+i*step));return finish(new T.CanvasTexture(c));}
+ // Signage: the canvas keeps the plate's aspect ratio so glyphs are never
+ // stretched, and the caption is grown until it fills the plate rather than
+ // sitting small in one corner.
+ function signTexture(text:string,w:number,h:number,fg='#f1ffd6',bg='#0b1c24'){
+  const cw=Math.max(64,Math.min(2048,Math.round(w*480))),ch=Math.max(32,Math.min(1024,Math.round(h*480)));
+  const c=document.createElement('canvas');c.width=cw;c.height=ch;const ctx=c.getContext('2d')!;
+  ctx.fillStyle=bg;ctx.fillRect(0,0,cw,ch);
+  const inset=Math.max(1,ch*.05);ctx.strokeStyle='#e8ffbc38';ctx.lineWidth=Math.max(1,ch*.03);ctx.strokeRect(inset,inset,cw-inset*2,ch-inset*2);
+  const rows=text.split('\n'),font=(size:number)=>`700 ${size}px ui-monospace,Menlo,Consolas,monospace`;
+  const maxWidth=cw-ch*.4,maxHeight=ch*(rows.length>1?.78:.62);
+  const setFont=(size:number)=>{ctx.font=font(size);ctx.letterSpacing=(size*.07).toFixed(2)+'px';};
+  const widest=(size:number)=>{setFont(size);return Math.max(1,...rows.map(row=>ctx.measureText(row).width));};
+  let size=maxHeight/(.72+1.18*(rows.length-1));
+  for(let i=0;i<5;i++){const fit=maxWidth/widest(size);if(fit>=1)break;size*=fit;}
+  setFont(size);const cap=ctx.measureText(rows[0]).actualBoundingBoxAscent,step=size*1.18;
+  ctx.fillStyle=fg;ctx.textAlign='center';ctx.textBaseline='alphabetic';
+  const first=ch/2-(cap+step*(rows.length-1))/2+cap;
+  rows.forEach((row,i)=>ctx.fillText(row,cw/2,first+i*step));
+  return finish(new T.CanvasTexture(c));}
+ function plane(p:T.Object3D,w:number,h:number,x:number,y:number,z:number,texture:T.Texture){const m=new T.MeshBasicMaterial({map:texture,side:T.DoubleSide,toneMapped:false});const o=mesh(p,new T.PlaneGeometry(w,h),m,x,y,z);o.castShadow=false;o.receiveShadow=false;return o;}
+ function label(p:T.Object3D,text:string,x:number,y:number,z:number,w=2,h=Math.min(.56,Math.max(.15,w*.26))){return plane(p,w,h,x,y,z,signTexture(text,w,h));}
  function imageScreen(p:T.Object3D,name:string,w:number,h:number,x:number,y:number,z:number){const m=new T.MeshBasicMaterial({color:'#d8ebe6'});const o=mesh(p,new T.PlaneGeometry(w,h),m,x,y,z);o.castShadow=false;m.map=screenshot(name);m.needsUpdate=true;return o;}
  function roomBase(g:T.Group,w=14,d=11,wall=C.wall){box(g,w,.25,d,0,-.15,0,C.floor);box(g,w,4.7,.2,0,2.2,-d/2,wall);box(g,.2,4.7,d,-w/2,2.2,0,wall);for(let x=-w/2+.6;x<w/2;x+=1.2)box(g,.018,.012,d,x,-.017,0,C.edge);box(g,w,.14,.17,0,.12,-d/2+.12,C.edge);}
  function door(p:T.Object3D,x:number,z:number,word:string,action:string,kind='wood'){
@@ -52,14 +79,14 @@ export function createWorlds(refresh:()=>void){
  function tv(p:T.Object3D,x:number,z:number,name='lumen',w=2.5){const g=group(p,x,0,z);interactive(g,'Filmhuis Lumen','project:4');box(g,w+.2,w*.6+.2,.18,0,1.6,0,C.black);imageScreen(g,name,w,w*.5625,0,1.6,.11);box(g,.12,.8,.12,0,.6,0,C.steel);box(g,1.2,.12,.6,0,.13,0,C.dark);return g;}
  function makeHouse():World{
   const g=new T.Group();roomBase(g);
-  door(g,-5.35,-5.25,'Delft','room:delft');door(g,-2.85,-5.25,'Dungeon','room:dungeon','dungeon');label(g,'MAKE YOURSELF AT HOME',.3,3.2,-5.15,3);
+  door(g,-5.35,-5.25,'Delft','room:delft');door(g,-2.85,-5.25,'Dungeon','room:dungeon','dungeon');label(g,'MAKE YOURSELF AT HOME',.3,3.2,-5.15,4);
   const stairs=group(g,4.65,0,-3.5);interactive(stairs,'Health · upstairs','room:health');for(let i=0;i<8;i++)box(stairs,1.45,.24*(i+1),.4,0,.12*(i+1),1.5-i*.4,C.wood);label(stairs,'HEALTH',0,3.3,-.8,2.2);for(const x of [-.83,.83])rod(stairs,new T.Vector3(x,1,1.6),new T.Vector3(x,2.8,-1.4),.035,C.edge);
   // Curved desktop with an inward arc, three independent displays, split keyboard.
   const desk=group(g,-2.1,0,.15);const shape=new T.Shape();shape.moveTo(-2.5,-.75);shape.quadraticCurveTo(0,-1.6,2.5,-.75);shape.lineTo(2.5,1);shape.quadraticCurveTo(0,.15,-2.5,1);shape.closePath();const top=mesh(desk,new T.ExtrudeGeometry(shape,{depth:.16,bevelEnabled:true,bevelSegments:2,steps:1,bevelSize:.04,bevelThickness:.03}),C.wood,0,1.18,0);top.rotation.x=-Math.PI/2;
   for(const x of [-2.15,2.15]){box(desk,.12,1.2,1.25,x,.6,0,C.dark);box(desk,.7,.07,1.5,x,.06,0,C.dark);}
   const screens:T.Mesh[]=[];const shots=['scenery-en-zo','cyto','diginova','lumen','shuttle'];
   for(let i=0;i<3;i++){const monitor=group(desk,(i-1)*1.5,1.85,-.65);monitor.rotation.y=(1-i)*.14;box(monitor,1.43,.88,.1,0,0,0,C.black);box(monitor,.08,.5,.08,0,-.55,0,C.steel);box(monitor,.6,.05,.32,0,-.8,.04,C.dark);
-   if(i===0){interactive(monitor,'Projects · browser monitor','project:0');screens.push(imageScreen(monitor,'scenery-en-zo',1.32,.74,0,0,.065));label(monitor,'PROJECT BROWSER',0,.56,.03,1.4);}
+   if(i===0){interactive(monitor,'Projects · browser monitor','project:0');screens.push(imageScreen(monitor,'scenery-en-zo',1.32,.74,0,0,.065));label(monitor,'PROJECT\nBROWSER',0,.79,.09,1.42,.62);}
    if(i===1){interactive(monitor,'Neovim · coding','about');plane(monitor,1.32,.74,0,0,.065,textTexture(['NVIM   portfolio.ts','const world = createHome();','  doors.connect("Delft");','  render(ideas);','NORMAL  main  UTF-8'],'#142c32','#acde98'));}
    if(i===2){interactive(monitor,'ChatGPT · building with AI','about');plane(monitor,1.32,.74,0,0,.065,textTexture(['ChatGPT','You: Let us build a world.','Assistant: Start at home.','Make every object a story.'],'#edf1ec','#25443a'));}
   }
@@ -108,7 +135,7 @@ export function createWorlds(refresh:()=>void){
   const gate=group(g,4.1,0,.8);for(const x of [-.4,.4]){cyl(gate,.2,1,x,.5,0,C.wood);cone(gate,.3,.6,x,1.3,0,C.dark);}box(gate,.5,.25,.4,0,.85,0,C.wood);label(gate,'OOSTPOORT',0,.3,.5,1.6);
   // Urban greenery concentrates eastward toward Delftse Hout.
   for(let i=0;i<40;i++){const x=8+(i%8)*1.2,z=-14+Math.floor(i/8)*1.2;if(routePoints.some(p=>Math.hypot(p[0]-x,p[1]-z)<.7))continue;cyl(g,.025,.35,x,.17,z,C.wood,6);sphere(g,.23,x,.48,z,C.green,8);}
-  label(g,'N ↑',-11,.2,-13,1);label(g,'DELFT',-9,.2,12,3);
+  label(g,'N ↑',-11,.3,-13,1);label(g,'DELFT',-9,.45,12,3);
   const tuks:T.Group[]=[];for(let i=0;i<3;i++){const tuk=group(g);interactive(tuk,'Delft City Shuttle · visit website','project:3');box(tuk,.45,.2,.8,0,.26,0,C.white);box(tuk,.5,.05,.9,0,.77,0,C.white);for(const x of [-.21,.21])for(const z of [-.35,.35])box(tuk,.025,.5,.025,x,.51,z,C.steel);box(tuk,.4,.26,.02,0,.57,.36,C.blue);for(const x of [-.23,.23]){const wheel=cyl(tuk,.11,.065,x,.12,-.25,C.dark);wheel.rotation.z=Math.PI/2;}const front=cyl(tuk,.11,.065,0,.12,.3,C.dark);front.rotation.z=Math.PI/2;tuks.push(tuk);}
   const path3=routePoints.map(p=>new T.Vector3(p[0],.05,p[1]));const lengths=[0];for(let i=1;i<path3.length;i++)lengths.push(lengths[i-1]+path3[i].distanceTo(path3[i-1]));const total=lengths[lengths.length-1];
   const walker=person(g,3.62,2.3,{hat:true});walker.group.scale.setScalar(.4);walker.group.visible=false;walker.group.userData.intro=true;
@@ -154,12 +181,23 @@ export function createWorlds(refresh:()=>void){
   return {group:g,title:'Upstairs · health',subtitle:'Panels in different sizes, a book, and a quiet evening.',distance:18,target:new T.Vector3(0,1,0),actions:[{label:'Downstairs to home',action:'room:house'},{label:'CytoLED panels & glasses',action:'project:1'}],tick(){}};
  }
  function makeCinema():World{
-  const g=new T.Group();roomBase(g,15,13,mat('#2c303c'));door(g,-6.1,-6.1,'Delft','room:delft');label(g,'FILMHUIS LUMEN',0,4.3,-6.1,6);
+  const g=new T.Group();roomBase(g,15,13,mat('#2c303c'));door(g,-6.1,-6.1,'Delft','room:delft');label(g,'FILMHUIS LUMEN',0,4.2,-6.1,6);
   const screen=group(g,0,0,-5.75);interactive(screen,'Filmhuis Lumen · visit website','project:4');box(screen,8,4.3,.15,0,2.4,0,C.black);imageScreen(screen,'lumen',7.7,4.05,0,2.4,.1);
   for(let row=0;row<4;row++){box(g,12,.16*(row+1),1.6,0,.08*(row+1),-.8+row*1.7,C.dark);for(let col=0;col<7;col++){const seat=chair(g,(col-3)*1.25+(col>3?.5:0),-.8+row*1.7,C.red);seat.position.y=.16*(row+1);seat.rotation.y=0;}}
   for(const x of [-6.7,6.7])for(let z=-3;z<6;z+=1.3)box(g,.08,.06,.35,x,.25,z,glow('#cfb778',.8));
   return {group:g,title:'Filmhuis Lumen',subtitle:'Take a seat. The big screen opens the website.',distance:20,target:new T.Vector3(0,1,0),actions:[{label:'Exit to Delft',action:'room:delft'},{label:'Filmhuis Lumen website',action:'project:4'}],tick(){}};
  }
  const builders={house:makeHouse,delft:makeDelft,dungeon:makeDungeon,lab:makeLab,health:makeHealth,cinema:makeCinema};const cache=new Map<RoomId,World>();
- return {get(id:RoomId){if(!cache.has(id))cache.set(id,builders[id]());return cache.get(id)!;},dispose(){const gs=new Set<T.BufferGeometry>(),ms=new Set<T.Material>();cache.forEach(w=>w.group.traverse(o=>{if(o instanceof T.Mesh){gs.add(o.geometry);(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>ms.add(m));}}));gs.forEach(g=>g.dispose());ms.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());}};
+ // Every clickable object gets a pulsing beacon floating above it, so what is
+ // interactive reads as interactive without a hover state (touch has none) and
+ // the beacon itself is an extra, larger tap target.
+ const beaconTexture=(()=>{const c=document.createElement('canvas');c.width=c.height=128;const ctx=c.getContext('2d')!;const halo=ctx.createRadialGradient(64,64,0,64,64,64);halo.addColorStop(0,'#d9ffb0ff');halo.addColorStop(.4,'#c9fb9655');halo.addColorStop(1,'#c9fb9600');ctx.fillStyle=halo;ctx.fillRect(0,0,128,128);ctx.beginPath();ctx.arc(64,64,16,0,Math.PI*2);ctx.fillStyle='#f6ffe8';ctx.fill();ctx.beginPath();ctx.arc(64,64,30,0,Math.PI*2);ctx.strokeStyle='#e4ffbe';ctx.lineWidth=4;ctx.stroke();return finish(new T.CanvasTexture(c));})();
+ function beacons(world:World){
+  const size=world.distance*.03,box=new T.Box3(),top=new T.Vector3(),targets:T.Object3D[]=[];
+  world.group.updateMatrixWorld(true);world.group.traverse(o=>{if(o.userData.action)targets.push(o);});
+  const list=targets.map(o=>{box.setFromObject(o);box.getCenter(top);top.y=box.max.y+size*.6;const s=new T.Sprite(new T.SpriteMaterial({map:beaconTexture,transparent:true,depthWrite:false,toneMapped:false}));s.userData.marker=true;s.position.copy(o.worldToLocal(top));s.scale.setScalar(size);o.add(s);return s;});
+  const tick=world.tick;world.tick=(t,dt)=>{tick(t,dt);const k=.5+.5*Math.sin(t*2.8);list.forEach(s=>{const hot=s.userData.hot;s.scale.setScalar(size*(hot?1.4:.85+.3*k));(s.material as T.SpriteMaterial).opacity=hot?1:.6+.4*k;});};
+  return world;
+ }
+ return {get(id:RoomId){if(!cache.has(id))cache.set(id,beacons(builders[id]()));return cache.get(id)!;},dispose(){const gs=new Set<T.BufferGeometry>(),ms=new Set<T.Material>();cache.forEach(w=>w.group.traverse(o=>{if(o instanceof T.Mesh){gs.add(o.geometry);(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>ms.add(m));}}));gs.forEach(g=>g.dispose());ms.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());}};
 }
