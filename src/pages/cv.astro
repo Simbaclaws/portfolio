@@ -1,0 +1,46 @@
+---
+import globalStyles from '../styles/global.css?inline';
+const title = 'Curriculum vitae — Hylke Hellinga';
+const pdf = import.meta.env.BASE_URL + 'hylke-hellinga-cv.pdf';
+---
+<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width"/><title>{title}</title><meta name="robots" content="noindex"/><meta name="theme-color" content="#09141b"/><style is:inline set:html={globalStyles}></style>
+<style>
+/* The PDF is drawn page by page with PDF.js, so it opens inline on phones too
+   (Android Chrome has no built-in viewer and would download it instead). */
+.cv{max-width:900px;margin:0 auto;padding:110px 24px 60px}.cv header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:24px}.cv h1{font-size:1.6rem;font-weight:450;margin:0}.cv-actions{display:flex;gap:10px}.cv-actions a{display:inline-block;padding:10px 16px;border:1px solid #c5f69a;color:#d2faa9;text-decoration:none;font-size:13px}.cv-actions a.primary{background:#c5f69a;color:#14201b}#pages{display:grid;gap:20px}#pages canvas{width:100%;height:auto;display:block;background:#fff;box-shadow:0 20px 60px #0008}#cv-status{color:#97adb1;font-size:13px}
+@media(max-width:700px){.cv{padding:90px 12px 40px}}
+</style></head>
+<body>
+<header class="hud"><a href={import.meta.env.BASE_URL} class="brand">A SMALL WORLD<span>AN INTERACTIVE PORTFOLIO</span></a></header>
+<main class="cv"><header><h1>Curriculum vitae</h1><nav class="cv-actions"><a href={import.meta.env.BASE_URL}>← Back to the world</a><a class="primary" href={pdf} download="hylke-hellinga-cv.pdf">Download PDF ↓</a></nav></header>
+<p id="cv-status" role="status">Loading the CV…</p>
+<div id="pages" data-pdf={pdf}></div>
+</main>
+<script>
+import * as pdfjs from 'pdfjs-dist';
+import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+const pages = document.getElementById('pages')!;
+const status = document.getElementById('cv-status')!;
+async function render() {
+ try {
+  const doc = await pdfjs.getDocument(pages.dataset.pdf!).promise;
+  const scale = Math.min(devicePixelRatio || 1, 2);
+  for (let n = 1; n <= doc.numPages; n++) {
+   const page = await doc.getPage(n);
+   const cssWidth = Math.min(pages.clientWidth, 900);
+   const viewport = page.getViewport({ scale: 1 });
+   const zoom = cssWidth / viewport.width;
+   const view = page.getViewport({ scale: zoom * scale });
+   const canvas = document.createElement('canvas');
+   canvas.width = view.width; canvas.height = view.height; canvas.setAttribute('aria-label', 'CV page ' + n);
+   pages.append(canvas);
+   await page.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport: view }).promise;
+  }
+  status.hidden = true;
+ } catch {
+  status.textContent = 'The viewer could not load. Use the download button above.';
+ }
+}
+render();
+</script></body></html>

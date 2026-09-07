@@ -102,7 +102,7 @@ export function createWorlds(refresh:()=>void,anisotropy=1){
   // Actual opening with Delft silhouettes beyond it.
   box(g,.22,2.3,3.1,-6.82,2.7,3.5,C.edge);box(g,.25,2.04,2.8,-6.68,2.7,3.5,mat('#6cacc1',.1,.25));for(const z of [2.13,3.5,4.87])box(g,.28,2.1,.06,-6.5,2.7,z,C.white);box(g,.28,.07,2.8,-6.5,2.7,3.5,C.white);
   for(let i=0;i<4;i++){box(g,.16,.4+i*.13,.38,-6.47,1.9+i*.07,2.5+i*.58,C.dark);cone(g,.27,.35,-6.47,2.2+i*.13,2.5+i*.58,C.red,4);}label(g,'DELFT / WINDOW',-5.9,3.95,3.5,1.8).rotation.y=Math.PI/2;
-  plant(g,5.9,3.8);plant(g,-.2,3.8);
+  plant(g,6.4,2.5);plant(g,-.2,3.8);
   // Small drum kit, hiking pack and game controllers represent hobbies.
   const drums=group(g,5.4,0,3.8);cyl(drums,.32,.25,0,.3,0,C.red).rotation.x=Math.PI/2;cyl(drums,.2,.15,-.4,.7,0,C.red);cyl(drums,.2,.15,.4,.7,0,C.red);cyl(drums,.32,.025,.55,.95,-.3,C.orange);interactive(drums,'Drumming and other things I enjoy','about');
   let last=0,index=0;return {group:g,title:'Home',subtitle:'Every door opens a different part of my world.',distance:19,target:new T.Vector3(0,1,0),actions:[{label:'Delft ↗',action:'room:delft'},{label:'Dungeon',action:'room:dungeon'},{label:'Health ↑',action:'room:health'},{label:'About me',action:'about'},{label:'Projects monitor',action:'project:0'}],tick(t){avatar.arms.forEach((a,i)=>a.rotation.x=-.9+Math.sin(t*2+i)*.04);if(t-last>7){last=t;index=(index+1)%shots.length;const m=screens[0].material as T.MeshBasicMaterial;m.map=screenshot(shots[index]);m.needsUpdate=true;screens[0].parent!.userData.action='project:'+([0,1,2,4,3][index]);}}};
