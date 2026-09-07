@@ -182,7 +182,10 @@ export function createWorlds(refresh:()=>void,anisotropy=1){
  function makeCinema():World{
   const g=new T.Group();roomBase(g,15,13,mat('#2c303c'));door(g,-6.1,-6.1,'Delft','room:delft');label(g,'FILMHUIS LUMEN',0,4.2,-6.1,6);
   const screen=group(g,0,0,-5.75);interactive(screen,'Filmhuis Lumen · visit website','project:4');box(screen,8,4.3,.15,0,2.4,0,C.black);imageScreen(screen,'lumen',7.7,4.05,0,2.4,.1);
-  for(let row=0;row<4;row++){box(g,12,.16*(row+1),1.6,0,.08*(row+1),-.8+row*1.7,C.dark);for(let col=0;col<7;col++){const seat=chair(g,(col-3)*1.25+(col>3?.5:0),-.8+row*1.7,C.red);seat.position.y=.16*(row+1);seat.rotation.y=0;}}
+  // Stadium seating: each row sits on a riser .45 higher than the one in
+  // front, with half-steps in the centre aisle. The default camera looks down
+  // at ~35°, which clears a .45 rise over 1.7 of depth, so every row stays visible.
+  for(let row=0;row<4;row++){const rise=.45*(row+1),z=-.8+row*1.7;box(g,12,rise,1.6,0,rise/2,z,C.dark);box(g,.9,rise-.225,.35,.875,(rise-.225)/2,z-.975,C.dark);for(let col=0;col<7;col++){const seat=chair(g,(col-3)*1.25+(col>3?.5:0),z,C.red);seat.position.y=rise;seat.rotation.y=0;}}
   for(const x of [-6.7,6.7])for(let z=-3;z<6;z+=1.3)box(g,.08,.06,.35,x,.25,z,glow('#cfb778',.8));
   return {group:g,title:'Filmhuis Lumen',subtitle:'Take a seat. The big screen opens the website.',distance:20,target:new T.Vector3(0,1,0),actions:[{label:'Exit to Delft',action:'room:delft'},{label:'Filmhuis Lumen website',action:'project:4'}],tick(){}};
  }
