@@ -1,0 +1,18 @@
+import { readFile, readdir } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import { gzipSync } from 'node:zlib';
+const html = await readFile('dist/index.html', 'utf8');
+for (const url of ['https://scenery-en-zo.myshopify.com/', 'https://nephropathology.github.io/CytoWebsiteSnapshot/', 'https://diginova.nl/', 'https://delftcityshuttle.nl/nl/', 'https://filmhuis-lumen.nl/']) assert.ok(html.includes(url), `Missing project URL: ${url}`);
+for (const id of ['main','work','lab-viewport','scenerie','cyto']) assert.ok(html.includes(`id="${id}"`), `Missing navigation target: ${id}`);
+assert.ok(html.includes('position:fixed') || html.includes('position: fixed'), 'Missing immersive stylesheet');
+assert.ok(!html.includes('rel="modulepreload"'), '3D must not be preloaded');
+assert.ok(!/<script[^>]+src="[^"]*lab\./.test(html), 'Lab must be loaded on demand');
+assert.ok(html.includes('<noscript>'), 'Missing no-JS explanation');
+const files = await readdir('dist/_astro');
+const lab = files.find(file => file.startsWith('lab.') && file.endsWith('.js'));
+assert.ok(lab, 'Missing lazy lab chunk');
+assert.ok(gzipSync(await readFile(`dist/_astro/${lab}`)).length < 180000, 'Lab exceeds gzip budget');
+let critical = gzipSync(html).length;
+for (const file of files.filter(file => file !== lab)) critical += gzipSync(await readFile(`dist/_astro/${file}`)).length;
+assert.ok(critical < 35000, 'Critical assets exceed gzip budget');
+console.log(`Static content, supplied links, navigation, lazy loading and budgets passed (${critical} bytes gzip critical).`);
